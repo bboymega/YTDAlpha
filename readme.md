@@ -30,7 +30,7 @@ Because sometimes you just want the video without **writing a CLI thesis**.
 
 Spin up the house in one command:
 ```
-docker run --rm -d -p 8080:8080 bboymega/ytdalpha:1.4
+docker run --rm -d -p 8080:8080 bboymega/ytdalpha:1.5
 ```
 
 Then open your browser:
@@ -49,6 +49,9 @@ You should now be able to access the WebUI locally, paste a URL, and chill.
 
 ## Changelog
 ```
+### 2026-03-12
+- Fixed a potential argument injection issue in yt-dlp when processing video URLs.
+
 ## 2026-03-11
 - Improved task and URL caching.
 - Fixed an issue where partially downloaded files could be purged during downloads.
