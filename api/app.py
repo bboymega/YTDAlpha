@@ -131,6 +131,7 @@ def get_cached_metadata(url, remote_addr):
             "--dump-json",
             "--no-playlist",
             "--flat-playlist",
+            "--",
             url
         ]
         result = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
