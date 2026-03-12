@@ -12,10 +12,12 @@ import psutil
 import random
 import glob
 import string
+import secrets
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
+from urllib.parse import urlparse, parse_qs, urlunparse
 
 load_dotenv()
 redis_host = os.getenv('REDIS_HOST', 'localhost')
@@ -43,30 +45,109 @@ def log_info(message, remote_addr="YTDAlpha"):
     timestamp = datetime.now().strftime('[%d/%b/%Y %H:%M:%S]')
     print(f"{timestamp} {remote_addr} \"INFO: {message}\"", flush=True)
 
+from urllib.parse import urlparse, parse_qs, urlunparse
+
+def normalize_url(url):
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        path = parsed.path
+
+        if host.startswith("www."):
+            host = host[4:]
+        if host.startswith("m."):
+            host = host[2:]
+
+        if "youtube.com" in host or "youtu.be" in host:
+            vid = None
+            if "youtu.be" in host:
+                vid = path.strip("/")
+            else:
+                qs = parse_qs(parsed.query)
+                vid = qs.get("v", [None])[0]
+            if vid:
+                return f"yt:{vid}"
+
+        if host in {"twitter.com", "x.com"}:
+            parts = [p for p in path.split("/") if p]
+            if len(parts) >= 3 and parts[1] == "status":
+                return f"tw:{parts[2]}"
+
+        if "tiktok.com" in host:
+            parts = [p for p in path.split("/") if p]
+            if "video" in parts:
+                return f"tt:{parts[-1]}"
+
+        if "instagram.com" in host:
+            parts = [p for p in path.split("/") if p]
+            if len(parts) >= 2 and parts[0] in {"reel", "p", "tv"}:
+                shortcode = parts[1]
+                return f"ig:{shortcode}"
+
+        if "vimeo.com" in host:
+            parts = [p for p in path.split("/") if p]
+            if parts and parts[0].isdigit():
+                return f"vi:{parts[0]}"
+
+        if "facebook.com" in host or "fb.watch" in host:
+            if "fb.watch" in host:
+                short = path.strip("/")
+                if short:
+                    return f"fb:{short}"
+
+            qs = parse_qs(parsed.query)
+            if "v" in qs:
+                return f"fb:{qs['v'][0]}"
+
+            parts = [p for p in path.split("/") if p]
+
+            if "videos" in parts:
+                idx = parts.index("videos")
+                if len(parts) > idx + 1:
+                    return f"fb:{parts[idx+1]}"
+
+            if len(parts) >= 2 and parts[0] == "reel":
+                return f"fb:{parts[1]}"
+
+        clean = urlunparse((parsed.scheme, host, path.rstrip("/"), "", "", ""))
+        return f"url:{clean}"
+
+    except Exception:
+        return f"url:{url}"
+
 def get_cached_metadata(url, remote_addr):
-    cache_key = f"meta:{url}"
-    
+    normalized_url = normalize_url(url)
+    cache_key = f"meta:{normalized_url}"
+
     cached = r.get(cache_key)
     if cached:
-        log_info(f"Using cached metadata for URL: [{url}]", remote_addr)
+        log_info(f"Using cached metadata for [{normalized_url}]", remote_addr)
         return json.loads(cached)
 
     log_info(f"Fetching metadata for URL: [{url}]", remote_addr)
     try:
-        meta_cmd = ['yt-dlp', '--dump-json', '--no-playlist', '--flat-playlist', url]
+        meta_cmd = [
+            "yt-dlp",
+            "--dump-json",
+            "--no-playlist",
+            "--flat-playlist",
+            url
+        ]
         result = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
             return None
-        
+
         info = json.loads(result.stdout)
         meta_data = {
-            "url_id": info.get('id'),
-            "title": info.get('title', 'video'),
-            "thumbnail": info.get('thumbnail'),
-            "uploader": info.get('uploader', 'Unknown')
+            "url_id": info.get("id"),
+            "title": info.get("title", "video"),
+            "thumbnail": info.get("thumbnail"),
+            "uploader": info.get("uploader", "Unknown")
         }
+
         r.set(cache_key, json.dumps(meta_data), ex=META_CACHE_TTL)
         return meta_data
+
     except Exception as e:
         log_error(f"Metadata fetch failed: {e}", remote_addr)
         return None
@@ -83,17 +164,20 @@ def get_task(task_key):
     if not data: return None
     
     task = json.loads(data)
+    set_task(task_key, task)
     if task.get('status') == 'processing':
         pid = task.get('pid')
         if pid and not is_pid_alive(pid):
             task.update({"status": "failed", "pid": None})
             set_task(task_key, task)
+
     return task
 
 def set_task(task_key, task_data):
-    r.set(f"task:{task_key}", json.dumps(task_data), ex=86400)
-    mode = "audio" if task_data.get('audio_only') else "video"
-    r.set(f"url_map:{mode}:{task_data['url']}", task_key, ex=86400)
+    r.set(f"task:{task_key}", json.dumps(task_data), ex=RETENTION)
+    mode = "audio" if task_data.get("audio_only") else "video"
+    normalized_url = normalize_url(task_data['url'])
+    r.set(f"url_map:{mode}:{normalized_url}", task_key, ex=RETENTION*2)
 
 def sanitize_name(name):
     return re.sub(r'[\\/*?:"<>|]', '_', name)[:150].strip()
@@ -186,7 +270,9 @@ def create_task():
 
     log_info(f"Conversion initiated for [{url}], audio_only={audio_only}", request.remote_addr)
 
-    task_key_existing = r.get(f"url_map:{mode}:{url}")
+    normalized_url = normalize_url(url)
+    task_key_existing = r.get(f"url_map:{mode}:{normalized_url}")
+
     if task_key_existing:
         existing = get_task(task_key_existing)
         if existing:
@@ -211,8 +297,11 @@ def create_task():
     if existing and existing['status'] == 'completed' and os.path.exists(existing.get('file_path', '')):
         return jsonify(sanitize_output(existing)), 200
 
-    base_file_path = os.path.join(TEMP_DIR, task_key)
-    dl_cmd = ['yt-dlp', '--newline', '--progress', '--no-playlist', '-o', f"{base_file_path}.%(ext)s", url]
+    salt = secrets.token_hex(4)
+    init_file_path = os.path.join(TEMP_DIR, task_key)
+    base_file_path = f"{init_file_path}_{salt}"
+    
+    dl_cmd = ['yt-dlp', '--newline', '--progress', '--no-playlist', '-o', f"{base_file_path}.%(ext)s", '--', url]
     if audio_only:
         dl_cmd.extend(['-x', '--audio-format', 'mp3', '--audio-quality', '0'])
     
@@ -293,6 +382,7 @@ def run_cleanup():
         try:
             now = time.time()
             tracked_files = set()
+            active_task_ids = set()
             
             for key in r.scan_iter("task:*"):
                 try:
@@ -305,6 +395,9 @@ def run_cleanup():
                     pid = task.get("pid")
                     task_id = task.get("id")
                     fpath = task.get("file_path")
+
+                    if task_id and status not in ["failed"]:
+                        active_task_ids.add(task_id)
 
                     if status == "failed":
                         if fpath and os.path.exists(fpath):
@@ -359,12 +452,18 @@ def run_cleanup():
 
             for fpath in glob.glob(os.path.join(TEMP_DIR, "*")):
                 abs_fpath = os.path.abspath(fpath)
+                filename = os.path.basename(abs_fpath)
                 
-                if os.path.isfile(abs_fpath) and abs_fpath not in tracked_files:
-                    
+                if abs_fpath in tracked_files:
+                    continue
+
+                if any(tid in filename for tid in active_task_ids if tid):
+                    continue
+                
+                if os.path.isfile(abs_fpath):
                     file_age = now - os.path.getmtime(abs_fpath)
                     
-                    if file_age > 1: 
+                    if file_age > 600: 
                         try:
                             os.remove(abs_fpath)
                             log_info(f"Orphaned file: Deleted untracked file {abs_fpath}")

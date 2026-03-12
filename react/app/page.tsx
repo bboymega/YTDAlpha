@@ -25,6 +25,7 @@ export default function VideoConverter() {
   const [progression, setProgression] = useState(0);
   const [isAudioOnly, setIsAudioOnly] = useState(false);
   const [uriId, setUriId] = useState('');
+  const [format, setFormat] = useState<string | null>(null);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "";
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
@@ -55,6 +56,7 @@ export default function VideoConverter() {
         setStatus(data.status);
         setProgression(data.percent || 0);
         setFileSize(data.current_size || 0);
+        setFormat(data.format || null);
         
         if (data.status === 'completed') {
           setIsProcessing(false);
@@ -118,7 +120,7 @@ export default function VideoConverter() {
       setThumbnailUrl(data.thumbnail);
       setUriId(data.url_id);
       startPolling(data.url_id);
-      setUploader(data.uploader)
+      setUploader(data.uploader);
       
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -145,12 +147,13 @@ export default function VideoConverter() {
   };
   
   return (
-    <div className="container-fluid min-vh-100 py-5" style={{ backgroundColor: '#fffbfa' }}>
+    <div className="container-fluid min-vh-100 py-5 d-flex flex-column" style={{ backgroundColor: '#fffbfa' }}>
       <div className="row justify-content-center">
         <div className="col-12 col-md-8 col-lg-6">
           
           <div className="text-center mb-5">
             <h1 className="display-5 fw-bold text-dark">YTDAlpha</h1>
+            <span className="text-muted">Simple, clean, no pledging and no hazing.</span>
           </div>
 
           {/* Search Card */}
@@ -160,7 +163,7 @@ export default function VideoConverter() {
                 <input
                   type="url"
                   className="form-control form-control-lg border-primary-subtle"
-                  placeholder="Paste video link here..."
+                  placeholder="Just paste a URL and let it cook..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   disabled={isProcessing}
@@ -368,7 +371,8 @@ export default function VideoConverter() {
                         </span>
                         <span className="text-success d-block">
                           <FontAwesomeIcon icon={faCheck} className="me-2" />
-                          Ready ({formatSize(fileSize)})
+                          Ready ({formatSize(fileSize)}
+                          {format && `, ${format}`})
                         </span>
                       </>
                     )}
@@ -391,6 +395,13 @@ export default function VideoConverter() {
 
         </div>
       </div>
+      <footer className="py-4 mt-auto border-top">
+        <div className="container text-center">
+          <p className="text-muted mb-0 small">
+            Because sometimes you just want the video without <b>writing a CLI thesis</b>.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -12,6 +12,7 @@ RUN apt-get update && \
     ca-certificates \
     git \
     unzip \
+    cron \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deno.land/install.sh | sh && \
@@ -33,6 +34,11 @@ COPY apache2-vhost.conf /app/
 RUN pip install --no-cache-dir --root-user-action=ignore --upgrade pip && \
     pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
+RUN echo "0 0 * * * root /usr/local/bin/pip install --no-cache-dir -U yt-dlp yt-dlp-ejs bgutil-ytdlp-pot-provider" \
+    > /etc/cron.d/ytdlp-update && \
+    chmod 0644 /etc/cron.d/ytdlp-update
+
+
 COPY /react/out /app/html/
 COPY /api /app/api/
 
@@ -43,9 +49,12 @@ ENV FLASK_RUN_HOST=0.0.0.0
 
 CMD ["sh", "-c", "\
 service redis-server start && \
+service cron start && \
+until redis-cli ping | grep -q PONG; do sleep 1; done && \
 chown www-data:www-data -R /app/html/ && \
 cp /app/apache2-vhost.conf /etc/apache2/sites-available/000-default.conf && \
 service apache2 start && \
+pip install --no-cache-dir -U yt-dlp yt-dlp-ejs bgutil-ytdlp-pot-provider && \
 cd /opt/bgutil-ytdlp-pot-provider/server && \
 deno run --allow-env --allow-ffi --allow-read --allow-net src/main.ts & \
 WORKERS=$(( $(nproc) * 2 + 1 )) && \

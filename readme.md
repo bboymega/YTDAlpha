@@ -24,13 +24,13 @@ Because sometimes you just want the video without **writing a CLI thesis**.
 
 ## Screenshot
 
-![YTDAlpha](Screenshot.jpeg)
+![YTDAlpha](Screenshot-YTDAlpha_1_1.jpeg)
 
 ## Quick Start (Docker):
 
 Spin up the house in one command:
 ```
-docker run --rm -d -p 8080:8080 bboymega/ytdalpha:1.0
+docker run --rm -d -p 8080:8080 bboymega/ytdalpha:1.4
 ```
 
 Then open your browser:
@@ -45,3 +45,13 @@ http://[server-ip]:8080
 ```
 
 You should now be able to access the WebUI locally, paste a URL, and chill.
+
+
+## Changelog
+```
+## 2026-03-11
+- Improved task and URL caching.
+- Fixed an issue where partially downloaded files could be purged during downloads.
+- Added support for automatic dependency updates on container startup.
+
+```
