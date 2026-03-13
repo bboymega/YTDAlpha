@@ -246,10 +246,10 @@ def monitor_process(process, task_key, base_file_path, remote_addr, audio_only=F
                 })
                 log_info(f"Task completed for {task['id']}, title=[{task['title']}], uploader=[{task['uploader']}], format={os.path.splitext(actual_path)[1][1:]}", remote_addr)
             else:
-                log_info(f"Conversion failed for {task['id']}", remote_addr)
+                log_error(f"Conversion failed for {task['id']}", remote_addr)
                 task.update({"status": "failed", "pid": None})
         else:
-            log_info(f"Conversion failed for {task['id']}", remote_addr)
+            log_error(f"Conversion failed for {task['id']}", remote_addr)
             task.update({"status": "failed", "pid": None})
 
     except Exception as e:
@@ -302,9 +302,11 @@ def create_task():
     init_file_path = os.path.join(TEMP_DIR, task_key)
     base_file_path = f"{init_file_path}_{salt}"
     
-    dl_cmd = ['yt-dlp', '--newline', '--progress', '--no-playlist', '-o', f"{base_file_path}.%(ext)s", '--', url]
+    dl_cmd = ['yt-dlp', '--newline', '--progress', '--no-playlist', '-o', f"{base_file_path}.%(ext)s"]
     if audio_only:
         dl_cmd.extend(['-x', '--audio-format', 'mp3', '--audio-quality', '0'])
+    
+    dl_cmd.extend(['--', url])
     
     process = subprocess.Popen(dl_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
