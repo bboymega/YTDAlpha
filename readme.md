@@ -49,10 +49,10 @@ You should now be able to access the WebUI locally, paste a URL, and chill.
 
 ## Changelog
 ```
-### 2026-03-12
+## 2026-03-16
 - Fixed an issue with audio downloading.
 
-### 2026-03-12
+## 2026-03-12
 - Fixed a potential argument injection issue in yt-dlp when processing video URLs.
 
 ## 2026-03-11
