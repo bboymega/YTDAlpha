@@ -715,11 +715,11 @@ export default function VideoConverter() {
                 )}
 
                 {item.status === "extracting" && (
-                  <span className="d-flex align-items-center">
+                  <span className="d-flex align-items-center text-dark">
                     <FontAwesomeIcon
                       icon={faCircleNotch}
                       spin
-                      className="me-1"
+                      className="me-1 text-primary"
                     />
                     Extracting URL...
                   </span>
