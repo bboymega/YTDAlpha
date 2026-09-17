@@ -214,7 +214,7 @@ def monitor_process(process, task_key, base_file_path, remote_addr, audio_only=F
                 display_percent = raw_percent if audio_only else (raw_percent * 0.9 if download_phase <= 1 else 90 + (raw_percent * 0.1))
                 display_percent = min(display_percent, 99.9)
 
-                if display_percent > last_reported_percent:
+                if last_reported_percent >= 0:
                     last_reported_percent = display_percent
                     task = get_task(task_key)
                     if task and task['status'] in ['extracting','processing', 'merging']:
